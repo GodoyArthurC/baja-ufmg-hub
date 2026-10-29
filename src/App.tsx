@@ -58,8 +58,8 @@ export default function App() {
   const [perfil, setPerfil] = useState<any>(null);
   const [carregandoSessao, setCarregandoSessao] = useState(true);
 
-  // Autenticação
-  const [authEmail, setAuthEmail] = useState('');
+  // Autenticação por CPF
+  const [authCpf, setAuthCpf] = useState('');
   const [authSenha, setAuthSenha] = useState('');
   const [authErro, setAuthErro] = useState('');
 
@@ -164,10 +164,8 @@ export default function App() {
     sessao?.user?.email === 'godoyarthurc@gmail.com' || 
     perfil?.cargo === 'NA';
 
-  // Quem pode publicar comunicados gerais
   const podeGerenciarGeral = ehSuperAdminOuNA || ehGestao;
 
-  // Quem pode editar ou apagar um aviso/reunião específico
   function podeGerenciarItem(subsistemaIdItem?: string | null) {
     if (ehSuperAdminOuNA || ehGestao) return true;
     if (perfil?.cargo === 'Chefe' || perfil?.cargo === 'Gerente') {
@@ -176,27 +174,44 @@ export default function App() {
     return false;
   }
 
-  // Obter nome de quem publicou/agendou
   function getNomeAutor(usuarioId?: string | null) {
     if (!usuarioId) return 'Liderança';
     const membro = membros.find((m) => m.id === usuarioId);
     return membro?.apelido || membro?.nome_completo || 'Membro da equipe';
   }
 
-  // Autenticação
+  // Máscara e Tratamento de CPF
+  function formatarMascaraCPF(valor: string) {
+    const apenasNumeros = valor.replace(/\D/g, '').slice(0, 11);
+    return apenasNumeros
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d)/, '$1.$2')
+      .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+  }
+
+  // Autenticação com Mapeamento CPF -> E-mail Interno
   async function handleAuth(e: React.FormEvent) {
     e.preventDefault();
     setAuthErro('');
 
+    const cpfLimpo = authCpf.replace(/\D/g, '');
+
+    if (cpfLimpo.length !== 11) {
+      setAuthErro('Informe um CPF válido com 11 dígitos.');
+      return;
+    }
+
+    const emailMapeado = `${cpfLimpo}@baja.local`;
+
     const { error } = await supabase.auth.signInWithPassword({
-      email: authEmail,
+      email: emailMapeado,
       password: authSenha
     });
 
     if (error) {
       setAuthErro(
         error.message === 'Invalid login credentials'
-          ? 'E-mail ou senha incorretos. Contate o NA.'
+          ? 'CPF ou senha incorretos. Contate o NA.'
           : error.message
       );
     }
@@ -496,14 +511,14 @@ export default function App() {
     );
   }
 
-  // TELA DE LOGIN
+  // TELA DE LOGIN POR CPF
   if (!sessao) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex items-center justify-center p-4">
         <div className="bg-neutral-900 border border-neutral-800 w-full max-w-sm rounded-2xl p-6 shadow-xl">
           <div className="text-center mb-6">
             <h1 className="text-2xl font-bold text-white tracking-tight">BAJA UFMG • Hub</h1>
-            <p className="text-xs text-neutral-400 mt-1">Acesso restrito para membros da equipe</p>
+            <p className="text-xs text-neutral-400 mt-1">Acesso exclusivo para membros da equipe</p>
           </div>
 
           {authErro && (
@@ -514,14 +529,15 @@ export default function App() {
 
           <form onSubmit={handleAuth} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-neutral-400 mb-1">E-mail</label>
+              <label className="block text-xs font-medium text-neutral-400 mb-1">CPF</label>
               <input
-                type="email"
+                type="text"
                 required
-                value={authEmail}
-                onChange={(e) => setAuthEmail(e.target.value)}
-                placeholder="seu.email@exemplo.com"
-                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                maxLength={14}
+                value={authCpf}
+                onChange={(e) => setAuthCpf(formatarMascaraCPF(e.target.value))}
+                placeholder="000.000.000-00"
+                className="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500 font-mono"
               />
             </div>
 
@@ -546,7 +562,7 @@ export default function App() {
           </form>
 
           <p className="text-[11px] text-neutral-500 text-center mt-5">
-            Acessos gerenciados pelo NA / Gestão.
+            Primeiro acesso ou alteração cadastral? Procure o NA.
           </p>
         </div>
       </div>
@@ -561,7 +577,7 @@ export default function App() {
           <h1 className="text-2xl font-bold tracking-tight text-white">BAJA UFMG • Hub</h1>
           <div className="flex items-center gap-2 mt-1 text-xs text-neutral-400">
             <UserIcon size={12} />
-            <span>{perfil?.nome_completo || sessao.user.email}</span>
+            <span>{perfil?.nome_completo || formatarMascaraCPF(sessao.user.email?.replace('@baja.local', '') || '')}</span>
             <span className="bg-neutral-800 text-neutral-300 px-1.5 py-0.5 rounded text-[10px] font-medium border border-neutral-700">
               {ehSuperAdminOuNA ? 'Admin (NA)' : perfil?.cargo || 'Membro'}
             </span>
@@ -966,7 +982,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal Criação / Edição de Avisos com Upload */}
+      {/* Modal Avisos */}
       {modalAvisoAberto && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 w-full max-w-md rounded-2xl p-6">
@@ -1023,7 +1039,7 @@ export default function App() {
                 />
               </div>
 
-              {/* Upload de Imagem ou PDF */}
+              {/* Upload de Anexo */}
               <div>
                 <label className="block text-xs font-medium text-neutral-400 mb-1">Anexo (Foto ou PDF)</label>
                 <input
@@ -1101,7 +1117,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal Criação / Edição de Reuniões */}
+      {/* Modal Reuniões */}
       {modalReuniaoAberto && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 w-full max-w-md rounded-2xl p-6">
@@ -1231,7 +1247,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Modal de Lista Detalhada de Presenças e Justificativas */}
+      {/* Modal Lista de Presenças */}
       {reuniaoVerPresencas && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-neutral-900 border border-neutral-800 w-full max-w-lg rounded-2xl p-6 max-h-[80vh] flex flex-col">

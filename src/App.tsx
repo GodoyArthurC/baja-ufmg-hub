@@ -160,24 +160,35 @@ export default function App() {
   const nucleoUsuario = subsistemas.find((s) => s.id === perfil?.nucleo_id);
   const ehGestao = subsistemaUsuario?.nome.toLowerCase() === 'gestão';
 
-  // Verifica se um ID de área pertence ao membro (Subsistema técnico ou Núcleo)
+  // Verifica se o membro faz parte da área (para visualização/leitura)
   function pertenceAoMembro(areaId?: string | null) {
     if (!areaId) return false;
     return areaId === perfil?.subsistema_id || areaId === perfil?.nucleo_id;
   }
 
-  // Permissões
+  // Permissões de Liderança Separadas (Subsistema vs Núcleo)
   const ehSuperAdminOuNA = 
     sessao?.user?.email === 'godoyarthurc@gmail.com' || 
     perfil?.cargo === 'NA';
 
   const podeGerenciarGeral = ehSuperAdminOuNA || ehGestao;
 
+  const ehLiderSubsistema = 
+    Boolean(perfil?.subsistema_id) && 
+    (perfil?.cargo === 'Chefe' || perfil?.cargo === 'Gerente');
+
+  const ehLiderNucleo = 
+    Boolean(perfil?.nucleo_id) && 
+    (perfil?.cargo_nucleo === 'Chefe' || perfil?.cargo_nucleo === 'Gerente');
+
+  const podeCriarConteudo = podeGerenciarGeral || ehLiderSubsistema || ehLiderNucleo;
+
+  // Verifica se o usuário tem poder de chefia sobre uma área específica
   function podeGerenciarItem(subsistemaIdItem?: string | null) {
-    if (ehSuperAdminOuNA || ehGestao) return true;
-    if (perfil?.cargo === 'Chefe' || perfil?.cargo === 'Gerente') {
-      return pertenceAoMembro(subsistemaIdItem);
-    }
+    if (podeGerenciarGeral) return true;
+    if (!subsistemaIdItem) return false;
+    if (ehLiderSubsistema && subsistemaIdItem === perfil?.subsistema_id) return true;
+    if (ehLiderNucleo && subsistemaIdItem === perfil?.nucleo_id) return true;
     return false;
   }
 
@@ -245,10 +256,12 @@ export default function App() {
     }
   }
 
-  // Área padrão inicial para líderes ao abrir modal
+  // Retorna apenas a área que o líder realmente chefia ao abrir o modal
   function getAreaPadraoLider() {
     if (podeGerenciarGeral) return '';
-    return perfil?.subsistema_id || perfil?.nucleo_id || '';
+    if (ehLiderSubsistema) return perfil.subsistema_id;
+    if (ehLiderNucleo) return perfil.nucleo_id;
+    return '';
   }
 
   // Avisos
@@ -484,7 +497,7 @@ export default function App() {
     return /\.(jpeg|jpg|png|webp|gif|svg)$/i.test(url);
   }
 
-  // Isolamento Estrito: Membro vê Geral + seu Subsistema + seu Núcleo (Gestão/NA veem tudo)
+  // Isolamento Estrito de Leitura: Geral + Subsistema + Núcleo
   const avisosFiltrados = avisos.filter((aviso) => {
     if (!ehSuperAdminOuNA && !ehGestao && aviso.subsistema_id && !pertenceAoMembro(aviso.subsistema_id)) {
       return false;
@@ -587,20 +600,27 @@ export default function App() {
       <header className="max-w-5xl mx-auto mb-6 border-b border-neutral-800 pb-4 flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold tracking-tight text-white">BAJA UFMG • Hub</h1>
-          <div className="flex flex-wrap items-center gap-2 mt-1 text-xs text-neutral-400">
+          <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-neutral-400">
             <UserIcon size={12} />
-            <span>{perfil?.nome_completo || formatarMascaraCPF(sessao.user.email?.replace('@baja.local', '') || '')}</span>
-            <span className="bg-neutral-800 text-neutral-300 px-1.5 py-0.5 rounded text-[10px] font-medium border border-neutral-700">
-              {ehSuperAdminOuNA ? 'Admin (NA)' : perfil?.cargo || 'Membro'}
+            <span className="text-neutral-200 font-medium">
+              {perfil?.nome_completo || formatarMascaraCPF(sessao.user.email?.replace('@baja.local', '') || '')}
             </span>
-            {subsistemaUsuario && (
-              <span className="text-neutral-400 text-[11px]">
-                • {subsistemaUsuario.nome}
+
+            {ehSuperAdminOuNA && (
+              <span className="bg-amber-500/20 text-amber-300 px-1.5 py-0.5 rounded text-[10px] font-semibold border border-amber-500/40">
+                Admin (NA)
               </span>
             )}
+
+            {subsistemaUsuario && (
+              <span className="bg-neutral-900 text-neutral-300 px-2 py-0.5 rounded text-[11px] border border-neutral-800">
+                {subsistemaUsuario.nome} ({perfil?.cargo || 'Membro'})
+              </span>
+            )}
+
             {nucleoUsuario && (
-              <span className="text-neutral-400 text-[11px]">
-                • Núcleo: {nucleoUsuario.nome}
+              <span className="bg-neutral-900 text-neutral-300 px-2 py-0.5 rounded text-[11px] border border-neutral-800">
+                Núcleo: {nucleoUsuario.nome} ({perfil?.cargo_nucleo || 'Membro'})
               </span>
             )}
           </div>
@@ -620,7 +640,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Barra de Filtros - Mostra Geral + Subsistema + Núcleo do membro */}
+      {/* Barra de Filtros */}
       <section className="max-w-5xl mx-auto mb-6">
         <div className="flex items-center gap-2 mb-2 text-xs text-neutral-400 font-medium">
           <Filter size={14} /> Filtrar área (Subsistema / Núcleo):
@@ -678,7 +698,7 @@ export default function App() {
               <Bell size={20} />
               <h2 className="text-lg font-semibold text-white">Mural de Avisos</h2>
             </div>
-            {(ehSuperAdminOuNA || ehGestao || perfil?.cargo === 'Chefe' || perfil?.cargo === 'Gerente') && (
+            {podeCriarConteudo && (
               <button
                 onClick={() => abrirModalAviso()}
                 className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs px-3 py-1.5 rounded-lg border border-neutral-700 transition"
@@ -793,7 +813,7 @@ export default function App() {
               <Calendar size={20} />
               <h2 className="text-lg font-semibold text-white">Próximas Reuniões</h2>
             </div>
-            {(ehSuperAdminOuNA || ehGestao || perfil?.cargo === 'Chefe' || perfil?.cargo === 'Gerente') && (
+            {podeCriarConteudo && (
               <button
                 onClick={() => abrirModalReuniao()}
                 className="flex items-center gap-1 bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs px-3 py-1.5 rounded-lg border border-neutral-700 transition"
@@ -1013,7 +1033,7 @@ export default function App() {
             </div>
             <form onSubmit={handleSalvarAviso} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-neutral-400 mb-1">Público-alvo (Subsistema / Núcleo)</label>
+                <label className="block text-xs font-medium text-neutral-400 mb-1">Público-alvo (Apenas áreas que você lidera)</label>
                 <select
                   value={novoAvisoSubsistema}
                   onChange={(e) => setNovoAvisoSubsistema(e.target.value)}
@@ -1021,13 +1041,13 @@ export default function App() {
                 >
                   {podeGerenciarGeral && <option value="">Geral / Todos (Toda a equipe)</option>}
                   {subsistemas
-                    .filter((s) => podeGerenciarGeral || pertenceAoMembro(s.id))
+                    .filter((s) => podeGerenciarItem(s.id))
                     .map((s) => (
                       <option key={s.id} value={s.id}>{s.nome}</option>
                     ))}
                 </select>
                 {!podeGerenciarGeral && (
-                  <p className="text-[10px] text-neutral-500 mt-1">Selecione o seu Subsistema ou Núcleo para publicar.</p>
+                  <p className="text-[10px] text-neutral-500 mt-1">Você só pode publicar na área onde possui cargo de Chefe/Gerente.</p>
                 )}
               </div>
               <div>
@@ -1145,7 +1165,7 @@ export default function App() {
             </div>
             <form onSubmit={handleSalvarReuniao} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-neutral-400 mb-1">Subsistema / Núcleo</label>
+                <label className="block text-xs font-medium text-neutral-400 mb-1">Subsistema / Núcleo (Apenas áreas que você lidera)</label>
                 <select
                   value={novaReuniaoSubsistema}
                   onChange={(e) => setNovaReuniaoSubsistema(e.target.value)}
@@ -1153,13 +1173,13 @@ export default function App() {
                 >
                   {podeGerenciarGeral && <option value="">Geral / Todos (Toda a equipe)</option>}
                   {subsistemas
-                    .filter((s) => podeGerenciarGeral || pertenceAoMembro(s.id))
+                    .filter((s) => podeGerenciarItem(s.id))
                     .map((s) => (
                       <option key={s.id} value={s.id}>{s.nome}</option>
                     ))}
                 </select>
                 {!podeGerenciarGeral && (
-                  <p className="text-[10px] text-neutral-500 mt-1">Selecione o seu Subsistema ou Núcleo para agendar.</p>
+                  <p className="text-[10px] text-neutral-500 mt-1">Você só pode agendar na área onde possui cargo de Chefe/Gerente.</p>
                 )}
               </div>
               <div>

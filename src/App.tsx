@@ -1326,6 +1326,12 @@ export default function App() {
           </div>
         </div>
       )}
+      {/* RODAPÉ DISCRETO */}
+      <footer className="max-w-5xl mx-auto mt-12 mb-4 text-center">
+        <p className="text-[10px] text-neutral-600 tracking-wider">
+          Desenvolvido por <span className="text-neutral-400 font-medium">Godoy</span>
+        </p>
+      </footer>
     </div>
   );
 }
